@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { characterApi, simulationApi, authApi, Character, User } from '../lib/backend-api'
 
 interface GameState {
   name: string
@@ -38,9 +39,116 @@ export default function Home() {
   const [state, setState] = useState<GameState>(initialState)
   const [activeTab, setActiveTab] = useState('events')
   const [bottomTab, setBottomTab] = useState('bottom-actions')
+  const [currentCharacterId, setCurrentCharacterId] = useState<string | null>(null)
+  const [currentUser, setCurrentUser] = useState<User | null>(null)
+  const [characters, setCharacters] = useState<Character[]>([])
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
 
-  const updateUI = () => {
-    // UI updates are handled by React state
+  // Authentication functions from static app.js
+  const checkAuth = async () => {
+    try {
+      const user = await authApi.getCurrentUser()
+      setCurrentUser(user)
+      setIsLoggedIn(true)
+      await loadCharacters()
+      if (currentCharacterId) {
+        await loadCharacter()
+      }
+    } catch (err) {
+      console.error('Auth check error:', err)
+      setIsLoggedIn(false)
+      showDemoData()
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const showDemoData = () => {
+    setState({
+      name: 'Demo Character',
+      age: 25,
+      stage: 'Adult',
+      resources: { health: 85, energy: 70, money: 15000, reputation: 45, knowledge: 120 },
+      traits: { intelligence: 35, charisma: 25, resilience: 40 },
+      skills: { work: 15, social: 20, healthcare: 10 },
+      family: { spouse: 'Demo Spouse', children: 2, legacy: 1250 },
+      quests: ['Complete Tutorial', 'Reach Age 18', 'Get First Job'],
+      events: ['Welcome to Life Simulator! This is a demo preview.', 'You can explore the interface and see how the game works.', 'Login with Google to create your own character and start playing!'],
+      day: 1,
+      year: 1,
+    })
+  }
+
+  // Character management functions from static app.js
+  const loadCharacters = async () => {
+    try {
+      const chars = await characterApi.listCharacters()
+      setCharacters(chars)
+      if (!currentCharacterId && chars.length > 0) {
+        setCurrentCharacterId(chars[0].id)
+      }
+    } catch (err) {
+      console.error('Load characters error:', err)
+    }
+  }
+
+  const loadCharacter = async () => {
+    if (!currentCharacterId) return
+    try {
+      const char = await characterApi.getCharacter(currentCharacterId)
+      updateUIFromCharacter(char)
+      await loadEvents()
+    } catch (err) {
+      console.error('Load character error:', err)
+    }
+  }
+
+  const loadEvents = async () => {
+    if (!currentCharacterId) return
+    try {
+      const events = await characterApi.getCharacterEvents(currentCharacterId)
+      setState(prev => ({
+        ...prev,
+        events: events.map((ev: any) => ev.message || JSON.stringify(ev))
+      }))
+    } catch (err) {
+      console.error('Load events error:', err)
+    }
+  }
+
+  const updateUIFromCharacter = (char: Character) => {
+    setState({
+      name: char.name,
+      age: Math.floor(char.age_days / 365),
+      stage: char.stage || 'Unknown',
+      resources: {
+        health: char.resources?.health || 0,
+        energy: char.resources?.energy || 0,
+        money: char.resources?.money || 0,
+        reputation: char.resources?.reputation || 0,
+        knowledge: char.resources?.knowledge || 0
+      },
+      traits: {
+        intelligence: char.traits?.intelligence || 0,
+        charisma: char.traits?.charisma || 0,
+        resilience: char.traits?.resilience || 0
+      },
+      skills: {
+        work: char.skills?.work || 0,
+        social: char.skills?.social || 0,
+        healthcare: char.skills?.healthcare || 0
+      },
+      family: {
+        spouse: char.spouse_id ? 'Yes' : 'None',
+        children: char.children_ids?.length || 0,
+        legacy: char.legacy_score || 0
+      },
+      quests: char.completed_quests || [],
+      events: [],
+      day: char.age_days % 365 || 1,
+      year: Math.floor(char.age_days / 365) + 1
+    })
   }
 
   const addEvent = (msg: string) => {
@@ -50,137 +158,184 @@ export default function Home() {
     }))
   }
 
-  const doAction = (action: string) => {
-    let msg = ""
-    setState(prev => {
-      const newState = { ...prev }
-      switch (action) {
-        case "advance-day":
-          newState.day += 1
-          if (newState.day > 365) {
-            newState.day = 1
-            newState.year += 1
-            newState.age += 1
-            msg = `A year has passed! You are now ${newState.age}.`
-          } else {
-            msg = "A new day begins."
-          }
-          // Random event
-          if (Math.random() < 0.3) {
-            const events = [
-              "You found $100 on the street!",
-              "You caught a cold and lost some health.",
-              "A friend invited you to a party.",
-              "You had a productive day at work.",
-              "You learned something new!"
-            ]
-            const e = events[Math.floor(Math.random() * events.length)]
-            msg += " " + e
-            if (e.includes("$100")) newState.resources.money += 100
-            if (e.includes("cold")) newState.resources.health = clamp(newState.resources.health - 10, 0, 100)
-            if (e.includes("productive")) newState.resources.money += 200
-            if (e.includes("learned")) newState.resources.knowledge += 5
-          }
-          break
-        case "advance-week":
-          for (let i = 0; i < 7; i++) {
-            // Simulate advance-day multiple times
-            newState.day += 1
-            if (newState.day > 365) {
-              newState.day = 1
-              newState.year += 1
-              newState.age += 1
-            }
-          }
-          msg = "A week has passed."
-          break
-        case "advance-month":
-          for (let i = 0; i < 30; i++) {
-            newState.day += 1
-            if (newState.day > 365) {
-              newState.day = 1
-              newState.year += 1
-              newState.age += 1
-            }
-          }
-          msg = "A month has passed."
-          break
-        case "trigger-event":
-          const randEvents = ["Birthday party!", "Job promotion!", "Illness.", "New friend.", "Financial windfall!"]
-          msg = randEvents[Math.floor(Math.random() * randEvents.length)]
-          break
-        case "simulate-life":
-          while (newState.age < 80) {
-            newState.day += 1
-            if (newState.day > 365) {
-              newState.day = 1
-              newState.year += 1
-              newState.age += 1
-            }
-          }
-          msg = "Life simulated to age 80."
-          break
-        case "reset-character":
-          Object.assign(newState, {
-            name: "Demo Character",
-            age: 18,
-            stage: "Young Adult",
-            resources: { health: 100, energy: 100, money: 1000, reputation: 10, knowledge: 50 },
-            traits: { intelligence: 10, charisma: 10, resilience: 10 },
-            skills: { work: 0, social: 0, healthcare: 0 },
-            family: { spouse: "None", children: 0, legacy: 0 },
-            quests: [],
-            events: ["Reset to birth."],
-            day: 1,
-            year: 1,
-          })
-          msg = "Character reset."
-          break
-        case "action-work":
-          newState.resources.money += 500
-          newState.resources.energy = clamp(newState.resources.energy - 20, 0, 100)
-          newState.skills.work += 1
-          msg = "You worked and earned money, but lost energy."
-          break
-        case "action-study":
-          newState.resources.knowledge += 10
-          newState.resources.energy = clamp(newState.resources.energy - 15, 0, 100)
-          newState.traits.intelligence += 1
-          msg = "You studied and gained knowledge."
-          break
-        case "action-socialize":
-          newState.resources.reputation += 5
-          newState.resources.energy = clamp(newState.resources.energy - 10, 0, 100)
-          newState.skills.social += 1
-          msg = "You socialized and improved reputation."
-          break
-        case "action-rest":
-          newState.resources.energy = clamp(newState.resources.energy + 30, 0, 100)
-          newState.resources.health = clamp(newState.resources.health + 5, 0, 100)
-          msg = "You rested and restored energy and health."
-          break
-        case "action-find-spouse":
-          if (newState.family.spouse === "None") {
-            newState.family.spouse = "New Spouse"
-            msg = "You found a spouse!"
-          } else {
-            msg = "You already have a spouse."
-          }
-          break
-        case "action-have-child":
-          if (newState.family.spouse !== "None") {
-            newState.family.children += 1
-            msg = "You had a child!"
-          } else {
-            msg = "You need a spouse first."
-          }
-          break
-        default:
-          msg = "Unknown action."
+  // Action functions from static app.js
+  const advanceTime = async (days: number) => {
+    if (!currentCharacterId) return
+    try {
+      const data = await simulationApi.advanceTime(currentCharacterId, days)
+      updateUIFromCharacter(data.character)
+      if (data.events) {
+        data.events.forEach((ev: any) => addEvent(ev.message || JSON.stringify(ev)))
       }
-      if (msg) addEvent(msg)
-      return newState
-    })
+    } catch (err) {
+      console.error('Advance time error:', err)
+      alert('Error advancing time')
+    }
+  }
+
+  const triggerEvent = async () => {
+    if (!currentCharacterId) return
+    try {
+      const data = await simulationApi.triggerEvent(currentCharacterId)
+      updateUIFromCharacter(data.character)
+      if (data.events) {
+        data.events.forEach((ev: any) => addEvent(ev.message || JSON.stringify(ev)))
+      }
+    } catch (err) {
+      console.error('Trigger event error:', err)
+      alert('Error triggering event')
+    }
+  }
+
+  const simulateLife = async () => {
+    if (!currentCharacterId) return
+    try {
+      const data = await simulationApi.simulateLife(currentCharacterId)
+      updateUIFromCharacter(data.character)
+      if (data.events) {
+        data.events.forEach((ev: any) => addEvent(ev.message || JSON.stringify(ev)))
+      }
+    } catch (err) {
+      console.error('Simulate life error:', err)
+      alert('Error simulating life')
+    }
+  }
+
+  const resetCharacter = async () => {
+    if (!currentCharacterId) return
+    try {
+      const char = await characterApi.resetCharacter({ characterId: currentCharacterId })
+      updateUIFromCharacter(char)
+      setState(prev => ({ ...prev, events: [] }))
+    } catch (err) {
+      console.error('Reset character error:', err)
+      alert('Error resetting character')
+    }
+  }
+
+  const performAction = async (actionId: string) => {
+    if (!currentCharacterId) return
+    try {
+      const char = await simulationApi.performAction(currentCharacterId, actionId)
+      updateUIFromCharacter(char)
+    } catch (err) {
+      console.error('Perform action error:', err)
+      alert('Error performing action')
+    }
+  }
+
+  const performAutoAction = async () => {
+    const health = state.resources.health
+    const energy = state.resources.energy
+    const money = state.resources.money
+    const reputation = state.resources.reputation
+    const ageYears = state.age
+
+    let chosenAction = 'rest'
+
+    if (health < 30 || energy < 30) {
+      chosenAction = 'rest'
+    } else if (money < 200 && ageYears >= 18) {
+      chosenAction = 'work'
+    } else if (reputation < 50) {
+      chosenAction = 'socialize'
+    } else {
+      chosenAction = 'study'
+    }
+
+    console.log(`Auto action: chose ${chosenAction}`)
+    await performAction(chosenAction)
+  }
+
+  const switchCharacter = async () => {
+    const select = document.getElementById('character-select') as HTMLSelectElement
+    const newId = select.value
+    if (newId && newId !== currentCharacterId) {
+      setCurrentCharacterId(newId)
+      await loadCharacter()
+      setState(prev => ({ ...prev, events: [] }))
+    }
+  }
+
+  const createCharacter = async () => {
+    const nameInput = document.getElementById('new-char-name') as HTMLInputElement
+    const name = nameInput.value.trim()
+    if (!name) {
+      alert('Please enter a character name')
+      return
+    }
+    try {
+      const newChar = await characterApi.createCharacter({ name })
+      nameInput.value = ''
+      await loadCharacters()
+      setCurrentCharacterId(newChar.id)
+      await loadCharacter()
+    } catch (err) {
+      console.error('Create character error:', err)
+      alert('Error creating character')
+    }
+  }
+
+  const login = () => {
+    window.location.href = '/auth/google/login'
+  }
+
+  const logout = async () => {
+    try {
+      await authApi.logout()
+      setCurrentUser(null)
+      setIsLoggedIn(false)
+      setCurrentCharacterId(null)
+      showDemoData()
+    } catch (err) {
+      console.error('Logout error:', err)
+    }
+  }
+
+  const doAction = async (action: string) => {
+    switch (action) {
+      case "advance-day":
+        await advanceTime(1)
+        break
+      case "advance-week":
+        await advanceTime(7)
+        break
+      case "advance-month":
+        await advanceTime(30)
+        break
+      case "trigger-event":
+        await triggerEvent()
+        break
+      case "simulate-life":
+        await simulateLife()
+        break
+      case "reset-character":
+        await resetCharacter()
+        break
+      case "action-work":
+        await performAction('work')
+        break
+      case "action-study":
+        await performAction('study')
+        break
+      case "action-socialize":
+        await performAction('socialize')
+        break
+      case "action-rest":
+        await performAction('rest')
+        break
+      case "action-find-spouse":
+        await performAction('find_spouse')
+        break
+      case "action-have-child":
+        await performAction('have_child')
+        break
+      case "action-auto":
+        await performAutoAction()
+        break
+      default:
+        console.log("Unknown action:", action)
+    }
   }
 
   const handleTabClick = (tab: string) => {
@@ -192,11 +347,11 @@ export default function Home() {
   }
 
   const handleCreateCharacter = () => {
-    const name = (document.getElementById('new-char-name') as HTMLInputElement)?.value
-    if (name) {
-      setState(prev => ({ ...prev, name }))
-      addEvent(`Created character: ${name}`)
-    }
+    createCharacter()
+  }
+
+  const handleSwitchCharacter = () => {
+    switchCharacter()
   }
 
   const handleFullscreen = () => {
@@ -208,11 +363,30 @@ export default function Home() {
   }
 
   useEffect(() => {
-    updateUI()
-  }, [state])
+    checkAuth()
+  }, [])
+
+  if (isLoading) {
+    return <div className="loading">Loading...</div>
+  }
 
   return (
     <div className="game-screen">
+      {/* AUTH SECTION */}
+      <div className="auth-section" style={{ position: 'absolute', top: '10px', right: '10px', zIndex: 1000 }}>
+        {isLoggedIn && currentUser ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <img src={currentUser.picture} alt="Profile" style={{ width: '32px', height: '32px', borderRadius: '50%' }} />
+            <span>{currentUser.name}</span>
+            <button onClick={logout} style={{ padding: '4px 8px', fontSize: '12px' }}>Logout</button>
+          </div>
+        ) : (
+          <button onClick={login} style={{ padding: '8px 16px', background: '#4285f4', color: 'white', border: 'none', borderRadius: '4px' }}>
+            🚀 Start Playing - Login with Google
+          </button>
+        )}
+      </div>
+
       {/* TOP BAR */}
       <div className="top-bar">
         <div className="top"><span id="game-date">Year {state.year}, Day {state.day} — Age {state.age}</span></div>
@@ -245,15 +419,20 @@ export default function Home() {
               <h3>👥 Character Management</h3>
               <div className="char-mgmt-content">
                 <div className="char-selector">
-                  <select id="character-select">
-                    <option value="demo">{state.name}</option>
+                  <select id="character-select" onChange={handleSwitchCharacter}>
+                    {characters.map(char => (
+                      <option key={char.id} value={char.id}>
+                        {char.name} (Age: {Math.floor(char.age_days / 365)}y)
+                      </option>
+                    ))}
+                    {characters.length === 0 && <option value="">No characters</option>}
                   </select>
-                  <button id="switch-character" className="action-btn" style={{padding: '4px 8px', fontSize: '10px'}}>Switch</button>
+                  <button id="switch-character" className="action-btn" style={{padding: '4px 8px', fontSize: '10px'}} onClick={handleSwitchCharacter}>Switch</button>
                 </div>
                 <div className="create-char">
                   <input type="text" id="new-char-name" placeholder="New character name" maxLength={20} />
                   <button id="create-character" className="action-btn" style={{padding: '4px 8px', fontSize: '10px'}} onClick={handleCreateCharacter}>Create</button>
-                  <span id="char-limit"> (Max 3)</span>
+                  <span id="char-limit"> ({characters.length}/3 characters)</span>
                 </div>
               </div>
             </div>
@@ -320,11 +499,11 @@ export default function Home() {
           </div>
           <div id="bottom-actions" className={`tab-content ${bottomTab === 'bottom-actions' ? 'active' : ''}`}>
             <div className="button-group">
-              <button className="action-btn" id="advance-day" onClick={() => doAction('advance-day')} title="Advance 1 Day">⏩1 day</button>
-              <button className="action-btn" id="advance-week" onClick={() => doAction('advance-week')} title="Advance 1 Week">📅1 week</button>
-              <button className="action-btn" id="advance-month" onClick={() => doAction('advance-month')} title="Advance 1 Month">📆1 month</button>
+              <button className="action-btn" id="advance-day" onClick={() => doAction('advance-day')} title="Advance 1 Day">⏩day</button>
+              <button className="action-btn" id="advance-week" onClick={() => doAction('advance-week')} title="Advance 1 Week">📅week</button>
+              <button className="action-btn" id="advance-month" onClick={() => doAction('advance-month')} title="Advance 1 Month">📆month</button>
               <button className="action-btn" id="trigger-event" onClick={() => doAction('trigger-event')} title="Trigger Event">🎲event</button>
-              <button className="action-btn" id="simulate-life" onClick={() => doAction('simulate-life')} title="Simulate Life">🚀simulate</button>
+              <button className="action-btn" id="simulate-life" onClick={() => doAction('simulate-life')} title="Simulate Life">🚀mimic</button>
               <button className="action-btn" id="reset-character" onClick={() => doAction('reset-character')} title="Reset">🔄reset</button>
             </div>
           </div>
@@ -336,6 +515,7 @@ export default function Home() {
               <button className="action-btn" id="action-rest" onClick={() => doAction('action-rest')} title="Rest">😴rest</button>
               <button className="action-btn" id="action-find-spouse" onClick={() => doAction('action-find-spouse')} title="Find Spouse">💍spouse</button>
               <button className="action-btn" id="action-have-child" onClick={() => doAction('action-have-child')} title="Have Child">👶child</button>
+              <button className="action-btn" id="action-auto" onClick={() => doAction('action-auto')} title="Auto Activity">🤖auto</button>
             </div>
           </div>
         </div>
