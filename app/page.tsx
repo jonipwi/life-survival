@@ -516,7 +516,6 @@ export default function Home() {
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-                  <p>Login to save your progress and create your own characters!</p>
                   <button onClick={login} style={{ padding: '12px 24px', background: '#4285f4', color: 'white', border: 'none', borderRadius: '4px', fontSize: '16px' }}>
                     🚀 Login with Google
                   </button>
