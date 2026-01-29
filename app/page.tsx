@@ -372,21 +372,6 @@ export default function Home() {
 
   return (
     <div className="game-screen">
-      {/* AUTH SECTION */}
-      <div className="auth-section" style={{ position: 'absolute', top: '10px', right: '10px', zIndex: 1000 }}>
-        {isLoggedIn && currentUser ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <img src={currentUser.picture} alt="Profile" style={{ width: '32px', height: '32px', borderRadius: '50%' }} />
-            <span>{currentUser.name}</span>
-            <button onClick={logout} style={{ padding: '4px 8px', fontSize: '12px' }}>Logout</button>
-          </div>
-        ) : (
-          <button onClick={login} style={{ padding: '8px 16px', background: '#4285f4', color: 'white', border: 'none', borderRadius: '4px' }}>
-            🚀 Start Playing - Login with Google
-          </button>
-        )}
-      </div>
-
       {/* TOP BAR */}
       <div className="top-bar">
         <div className="top"><span id="game-date">Year {state.year}, Day {state.day} — Age {state.age}</span></div>
@@ -496,6 +481,7 @@ export default function Home() {
           <div className="tab-buttons">
             <button className={`tab-btn ${bottomTab === 'bottom-actions' ? 'active' : ''}`} onClick={() => handleBottomTabClick('bottom-actions')}>Actions</button>
             <button className={`tab-btn ${bottomTab === 'bottom-activities' ? 'active' : ''}`} onClick={() => handleBottomTabClick('bottom-activities')}>Activity</button>
+            <button className={`tab-btn ${bottomTab === 'login' ? 'active' : ''}`} onClick={() => handleBottomTabClick('login')}>Login</button>
           </div>
           <div id="bottom-actions" className={`tab-content ${bottomTab === 'bottom-actions' ? 'active' : ''}`}>
             <div className="button-group">
@@ -516,6 +502,26 @@ export default function Home() {
               <button className="action-btn" id="action-find-spouse" onClick={() => doAction('action-find-spouse')} title="Find Spouse">💍spouse</button>
               <button className="action-btn" id="action-have-child" onClick={() => doAction('action-have-child')} title="Have Child">👶child</button>
               <button className="action-btn" id="action-auto" onClick={() => doAction('action-auto')} title="Auto Activity">🤖auto</button>
+            </div>
+          </div>
+          <div id="login" className={`tab-content ${bottomTab === 'login' ? 'active' : ''}`}>
+            <div className="login-content">
+              {isLoggedIn && currentUser ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                  <img src={currentUser.picture} alt="Profile" style={{ width: '64px', height: '64px', borderRadius: '50%' }} />
+                  <span style={{ fontWeight: 'bold' }}>{currentUser.name}</span>
+                  <button onClick={logout} style={{ padding: '8px 16px', background: '#dc3545', color: 'white', border: 'none', borderRadius: '4px' }}>
+                    Logout
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                  <p>Login to save your progress and create your own characters!</p>
+                  <button onClick={login} style={{ padding: '12px 24px', background: '#4285f4', color: 'white', border: 'none', borderRadius: '4px', fontSize: '16px' }}>
+                    🚀 Login with Google
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
